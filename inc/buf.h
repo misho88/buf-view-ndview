@@ -168,4 +168,7 @@ struct view view_str(char *);
 
 int view_equals(struct view, struct view);
 int view_contains(struct view, struct view);
+
+int buf_printf_into(struct buf * buf, char const * fmt, ...);
+
 #endif//__BUF_H__

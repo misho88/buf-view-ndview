@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <math.h>
 #include <stdarg.h>
+#include <assert.h>
 
 struct buf const NULL_BUF = {
 	.data = NULL,
@@ -239,4 +240,41 @@ int view_contains(struct view view, struct view other)
 		if (memcmp(view.data + i, other.data, other.size) == 0)
 			return 1;
 	return 0;
+}
+
+int buf_printf_into(struct buf * buf, char const * fmt, ...)
+{
+	va_list args1, args2;
+	va_start(args1, fmt);
+	va_copy(args2, args1);
+
+	int retval;
+
+	if (buf_is_null(buf)) { if ((retval = buf_resize(buf, 0))) goto finish; }
+
+	int n = vsnprintf(buf->data, buf->capacity, fmt, args1);
+	if (n < 0) {
+		retval = n;
+		goto finish;
+	};
+
+	if ((size_t)n + 1 <= buf->capacity) {
+		buf->size = n + 1;
+		retval = n;
+		goto finish;
+	}
+
+	if ((retval = buf_resize(buf, n + 1))) goto finish;
+	n = vsnprintf(buf->data, buf->size, fmt, args2);
+	if (n < 0) {
+		retval = n;
+		goto finish;
+	};
+	assert((size_t)n + 1 == buf->size);
+	retval = n;
+
+finish:
+	va_end(args1);
+	va_end(args2);
+	return retval;
 }
