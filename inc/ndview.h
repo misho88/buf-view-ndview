@@ -2,6 +2,7 @@
 #define __NDVIEW_H__
 
 #include <stdio.h>
+#include <buf.h>
 
 struct ndview {
 	void * data;
@@ -69,5 +70,7 @@ int ndview_fprint(
 	)
 
 int ndview_is_dense_row_major(struct ndview const *);
+
+struct view ndview_memory(struct ndview const *, size_t item_size);
 
 #endif//__NDVIEW_H__

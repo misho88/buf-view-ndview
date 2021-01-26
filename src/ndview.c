@@ -193,3 +193,14 @@ int ndview_is_dense_row_major(struct ndview const * view)
 			return 0;
 	return 1;
 }
+
+struct view ndview_memory(struct ndview const * ndview, size_t item_size)
+{
+	ssize_t beg_addr = 0, end_addr = 0;
+	for (size_t d = 0; d < ndview->ndim; ++d) {
+		ssize_t addr = (ndview->shape[d] - 1) * ndview->strides[d];
+		beg_addr += addr * (ndview->strides[d] < 0);
+		end_addr += addr * (ndview->strides[d] > 0);
+	}
+	return (struct view){ ndview->data + beg_addr, item_size + end_addr - beg_addr };
+}
