@@ -155,7 +155,7 @@ struct view view_partial(struct view, size_t, size_t);
 	struct view v = (view_expr); \
 	fprintf(stream, "[ "); \
 	for (i = 0; i < v.size - stride; i += stride) \
-		fprintf(stream, fmt " ", *(type *)(v.data + i)); \
+		fprintf(stream, fmt, *(type *)(v.data + i)); \
 	fprintf(stream, fmt " ]", *(type *)(v.data + i)); \
 } while (0)
 #define view_print(view_expr, fmt, type) do { \
