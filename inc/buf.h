@@ -163,4 +163,9 @@ struct view view_partial(struct view, size_t, size_t);
 } while (0)
 
 int buf_append(struct buf *, struct view);
+
+struct view view_str(char *);
+
+int view_equals(struct view, struct view);
+int view_contains(struct view, struct view);
 #endif//__BUF_H__

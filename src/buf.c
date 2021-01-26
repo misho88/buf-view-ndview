@@ -224,3 +224,19 @@ int buf_append(struct buf * buf, struct view view)
 	return view_copy(buf_append_view, view);
 }
 
+struct view view_str(char * str) { return (struct view){ str, strlen(str) }; }
+
+int view_equals(struct view view, struct view other)
+{
+	if (view.size != other.size) return 0;
+	return memcmp(view.data, other.data, view.size) == 0;
+}
+
+int view_contains(struct view view, struct view other)
+{
+	ssize_t end = (ssize_t)view.size - (ssize_t)other.size;
+	for (ssize_t i = 0; i <= end; ++i)
+		if (memcmp(view.data + i, other.data, other.size) == 0)
+			return 1;
+	return 0;
+}
