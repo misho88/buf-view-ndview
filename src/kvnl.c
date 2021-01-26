@@ -6,7 +6,8 @@
 char const * KVNL_ERROR_MESSAGES[KVNL_NUMBER_OF_ERRORS] = {
 	"success",
 	"malformed specification (contains = or NL)",
-	"encoding failed (likely due to a memory error)"
+	"encoding failed (likely due to a memory error)",
+	"writing a size (an integer) failed (likely due to a memory error)",
 };
 
 
@@ -29,6 +30,50 @@ ssize_t kvnl_write_some(int fd, struct view view, kvnl_update_func hash)
 ssize_t kvnl_write_newline(int fd, kvnl_update_func hash)
 {
 	return kvnl_write_some(fd, (struct view){ "\n", 1 }, hash);
+}
+
+
+size_t n_digits(size_t n) {
+	if (n >= (int)1e19) return 20;
+	if (n == 0) return 1;
+	for (size_t i = 1, c = 0; ; i *= 10, c++)
+		if (i > n) return c;
+	return 0;
+}
+
+
+ssize_t kvnl_write_sizes(int fd, ssize_t * sizes, size_t count, kvnl_update_func hash, struct buf * fmt_buf)
+{
+	struct buf _buf, * buf;
+	if (fmt_buf == NULL) {
+		_buf = make_buf_grow_only(2.0f);
+		buf = &_buf;
+	}
+	else {
+		buf = fmt_buf;
+	}
+
+	ssize_t r, total = 0;
+	
+	for (size_t d = 0; d < count; d++) {
+		ssize_t size = sizes[d];
+		size_t s = n_digits(size);
+
+		if (buf_resize(buf, s + 1)) r = -KVNL_WRITE_SIZES_FAILED;
+		if (r < 0) goto cleanup;
+
+		ssize_t m = sprintf(buf->data, "%ld%s", size, d == count - 1 ? "" : " ");
+		if (m < 0) r = -KVNL_WRITE_SIZES_FAILED;
+		if (r < 0) goto cleanup;
+
+		r = kvnl_write_some(fd, (struct view){ buf->data, m }, hash);
+		if (r < 0) goto cleanup;
+		total += r;
+	}
+	r = total;
+cleanup:
+	if (fmt_buf == NULL) buf_free(buf);
+	return r;
 }
 
 ssize_t kvnl_write_specification(int fd, struct view spec, kvnl_update_func hash)
@@ -57,15 +102,6 @@ ssize_t kvnl_write_value(int fd, struct view value, kvnl_update_func hash)
 }
 
 
-size_t n_digits(size_t n) {
-	if (n >= (int)1e19) return 20;
-	if (n == 0) return 1;
-	for (size_t i = 1, c = 0; ; i *= 10, c++)
-		if (i > n) return c;
-	return 0;
-}
-
-
 ssize_t kvnl_encode_specification(char * key, ssize_t size, struct buf * dest)
 {
 	int r;
@@ -85,20 +121,67 @@ ssize_t kvnl_encode_specification(char * key, ssize_t size, struct buf * dest)
 	return KVNL_SUCCESS;
 }
 
-ssize_t kvnl_write_line(int fd, char * key, struct view value, int sized, kvnl_update_func hash, struct buf * spec_buf)
+ssize_t kvnl_write_line(int fd, char * key, struct view value, int sized, kvnl_update_func hash, struct buf * fmt_buf)
 {
-	struct buf buf = spec_buf == NULL ? make_buf_grow_only(2.0f) : *spec_buf;
+	struct buf _buf, * buf;
+	if (fmt_buf == NULL) {
+		_buf = make_buf_grow_only(2.0f);
+		buf = &_buf;
+	}
+	else {
+		buf = fmt_buf;
+	}
 	if (sized < 0) sized = value.size > 1024 || view_contains(value, view_str("\n"));
 
 	ssize_t r, total = 0;
-	r = kvnl_encode_specification(key, sized ? (ssize_t)value.size : -1L, &buf);
+	r = kvnl_encode_specification(key, sized ? (ssize_t)value.size : -1L, buf);
 	if (r < 0) goto cleanup;
-	r = kvnl_write_specification(fd, buf_view(&buf), hash);
+	r = kvnl_write_specification(fd, buf_view(buf), hash);
 	if (r < 0) goto cleanup; else total += r;
 	r = kvnl_write_value(fd, value, hash);
 	if (r < 0) goto cleanup; else total += r;
 	r = total;
 cleanup:
-	if (spec_buf == NULL) buf_free(&buf);
+	if (fmt_buf == NULL) buf_free(buf);
+	return r;
+}
+
+ssize_t kvnl_write_ndview(int fd, struct ndview * ndview, char * dtype, size_t item_size, kvnl_update_func hash, struct buf * fmt_buf)
+{
+	struct buf _buf, * buf;
+	if (fmt_buf == NULL) {
+		_buf = make_buf_grow_only(2.0f);
+		buf = &_buf;
+	}
+	else {
+		buf = fmt_buf;
+	}
+	ssize_t r, total = 0;
+	r = kvnl_write_line(fd, "dtype", view_str(dtype), -1, hash, buf);
+	if (r < 0) goto cleanup; else total += r;
+
+	r = kvnl_write_specification(fd, view_str("shape"), hash);
+	if (r < 0) goto cleanup; else total += r;
+	r = kvnl_write_sizes(fd, (ssize_t *)ndview->shape, ndview->ndim, hash, buf);
+	if (r < 0) goto cleanup; else total += r;
+	r = kvnl_write_newline(fd, hash);
+
+	r = kvnl_write_specification(fd, view_str("strides"), hash);
+	if (r < 0) goto cleanup; else total += r;
+	r = kvnl_write_sizes(fd, ndview->strides, ndview->ndim, hash, buf);
+	if (r < 0) goto cleanup; else total += r;
+	r = kvnl_write_newline(fd, hash);
+
+	struct view value = ndview_memory(ndview, item_size);
+	r = kvnl_encode_specification("data", value.size, buf);
+	if (r < 0) goto cleanup;
+	r = kvnl_write_specification(fd, buf_view(buf), hash);
+	if (r < 0) goto cleanup; else total += r;
+	r = kvnl_write_value(fd, value, hash);
+	if (r < 0) goto cleanup; else total += r;
+
+	r = total;
+cleanup:
+	if (fmt_buf == NULL) buf_free(buf);
 	return r;
 }
