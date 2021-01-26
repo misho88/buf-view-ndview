@@ -7,7 +7,7 @@ struct ndview {
 	void * data;
 	size_t ndim;
 	size_t * shape;
-	size_t * strides;
+	ssize_t * strides;
 };
 
 extern struct ndview INVALID_NDVIEW;
@@ -16,12 +16,12 @@ struct ndview make_ndview(
 	void * data,
 	size_t ndim,
 	size_t * shape,
-	long * strides
+	ssize_t * strides
 );
 struct ndview make_ndview_row_major(
 	void * data,
 	size_t * shape,
-	long * strides,
+	ssize_t * strides,
 	char const * spec,
 	size_t elem_size
 );

@@ -11,7 +11,7 @@ struct ndview make_ndview(
 	void * data,
 	size_t ndim,
 	size_t * shape,
-	long * strides
+	ssize_t * strides
 )
 {
 	if (data == NULL) {
@@ -116,7 +116,7 @@ int ndview_set_strides(struct ndview * ndview, char const * spec, size_t elem_si
 	char * buff = malloc(spec_len), * mem = buff;
 	if (mem == NULL) return errno;
 
-	size_t * strides = ndview->strides;
+	ssize_t * strides = ndview->strides;
 	ndview->ndim = 0;
 	memcpy(buff, spec, spec_len);
 	for (char * token; (token = strtok_r(buff, ",", &buff)); strides++) {
@@ -189,7 +189,7 @@ int ndview_fprint(
 int ndview_is_dense_row_major(struct ndview const * view)
 {
 	for (long i = view->ndim - 1; i > 0; i--)
-		if (view->shape[i] * view->strides[i] != view->strides[i - 1])
+		if ((ssize_t)view->shape[i] * view->strides[i] != view->strides[i - 1])
 			return 0;
 	return 1;
 }
