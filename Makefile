@@ -1,5 +1,6 @@
 CC=gcc
 CFLAGS=-fPIC -I./inc
+LDFLAGS=-L./lib -lbuf -lndview
 
 all: static_libs dynamic_libs
 
@@ -22,11 +23,12 @@ lib/libndview.so: src/ndview.c inc/ndview.h
 lib/libndview.a: src/ndview.c inc/ndview.h
 	$(CC) -static -c $(CFLAGS) $< -o $@
 
-test: test.c
-	$(CC) -static $(CFLAGS) $< -o $@
+test: test.c static_libs dynamic_libs
+	$(CC) -static $(CFLAGS) $< $(LDFLAGS) -o $@
 
 run_test: test
 	./$<
 
 clean:
 	rm -f $(STATIC_LIBS) $(DYNAMIC_LIBS)
+	rm -f test
