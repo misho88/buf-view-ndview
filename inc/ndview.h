@@ -11,6 +11,9 @@ struct ndview {
 	ssize_t * strides;
 };
 
+
+struct extent { ssize_t lower, upper; };
+
 extern struct ndview INVALID_NDVIEW;
 
 struct ndview make_ndview(
@@ -26,6 +29,7 @@ struct ndview make_ndview_row_major(
 	char const * spec,
 	size_t elem_size
 );
+
 
 int ndview_set_shape(struct ndview * ndview, char const * spec);
 int ndview_set_strides(struct ndview * ndview, char const * spec, size_t elem_size);
@@ -71,6 +75,7 @@ int ndview_fprint(
 
 int ndview_is_dense_row_major(struct ndview const *);
 
+struct extent ndview_extent(struct ndview const * ndview, size_t item_size);
 struct view ndview_memory(struct ndview const *, size_t item_size);
 
 #endif//__NDVIEW_H__
