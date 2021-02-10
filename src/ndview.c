@@ -208,5 +208,5 @@ struct extent ndview_extent(struct ndview const * ndview, size_t item_size)
 struct view ndview_memory(struct ndview const * ndview, size_t item_size)
 {
 	struct extent extent = ndview_extent(ndview, item_size);
-	return (struct view){ ndview->data + extent.lower, item_size + extent.upper - extent.lower };
+	return (struct view){ ndview->data + extent.lower, extent.upper - extent.lower };
 }
