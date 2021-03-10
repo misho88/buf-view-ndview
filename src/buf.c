@@ -221,7 +221,7 @@ int buf_append(struct buf * buf, struct view view)
 {
 	size_t orig_size = buf->size;
 	if (buf_resize(buf, orig_size + view.size)) return errno;
-	struct view buf_append_view = view_partial(buf_view(buf), orig_size, view.size);
+	struct view buf_append_view = view_partial(buf_view(buf), orig_size, buf->size);
 	return view_copy(buf_append_view, view);
 }
 
@@ -240,6 +240,17 @@ int view_contains(struct view view, struct view other)
 		if (memcmp(view.data + i, other.data, other.size) == 0)
 			return 1;
 	return 0;
+}
+
+struct view view_difference(struct view a, struct view b)
+{
+	void * a_end = a.data + a.size, * b_end = b.data + b.size;
+	/* no intersection */
+	if (a_end < b.data || b_end < a.data) return a;
+	/* intersection at start */
+	if (a.data >= b.data) return (struct view){ b.data, a_end - b.data };
+	/* intersection at end */
+	return (struct view){ a.data, b.data - a.data };
 }
 
 int buf_printf_into(struct buf * buf, char const * fmt, ...)
