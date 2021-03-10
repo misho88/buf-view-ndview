@@ -151,12 +151,11 @@ int view_copy(struct view, struct view);
 struct view view_partial(struct view, size_t, size_t);
 
 #define view_fprint(view_expr, fmt, type, stream) do {\
-	size_t stride = sizeof(type), i; \
 	struct view v = (view_expr); \
 	fprintf(stream, "[ "); \
-	for (i = 0; i < v.size - stride; i += stride) \
-		fprintf(stream, fmt, *(type *)(v.data + i)); \
-	fprintf(stream, fmt " ]", *(type *)(v.data + i)); \
+	for (type * item = (type *)v.data; (void *)item < v.data + v.size; item++) \
+		fprintf(stream, fmt, *item); \
+	fprintf(stream, " ]"); \
 } while (0)
 #define view_print(view_expr, fmt, type) do { \
 	view_fprint(view_expr, fmt, type, stdout); \
@@ -168,6 +167,7 @@ struct view view_str(char *);
 
 int view_equals(struct view, struct view);
 int view_contains(struct view, struct view);
+struct view view_difference(struct view, struct view);
 
 int buf_printf_into(struct buf * buf, char const * fmt, ...);
 
