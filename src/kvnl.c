@@ -1,13 +1,18 @@
 #include <kvnl.h>
 #include <stdio.h>
 #include <limits.h>
+#include <string.h>
 
 
 char const * KVNL_ERROR_MESSAGES[KVNL_NUMBER_OF_ERRORS] = {
 	"success",
+	"stream reached EOF",
+	"reading from stream failed (consult errno)",
 	"malformed specification (contains = or NL)",
 	"encoding failed (likely due to a memory error)",
 	"writing a size (an integer) failed (likely due to a memory error)",
+	"reading needs to either be specified by a terminating character or a size",
+	"expected a newline",
 };
 
 
@@ -16,8 +21,14 @@ char const * kvnl_look_up_error(int error)
 	if (error < 0) error = -error;
 	if (error < 0x1000) return "no such error";
 	error -= 0x1000;
-	if (error > 2) return "no such error";
+	if (error > KVNL_NUMBER_OF_ERRORS) return "no such error";
 	return KVNL_ERROR_MESSAGES[error - 0x1000];
+}
+
+
+struct kvnl_specification kvnl_specification_from_string(char * key, ssize_t size)
+{
+	return (struct kvnl_specification){ .key = { key, strlen(key) }, .size = size };
 }
 
 
@@ -54,7 +65,7 @@ ssize_t kvnl_write_sizes(int fd, ssize_t * sizes, size_t count, kvnl_update_func
 	}
 
 	ssize_t r, total = 0;
-	
+
 	for (size_t d = 0; d < count; d++) {
 		ssize_t size = sizes[d];
 		size_t s = n_digits(size);
@@ -88,7 +99,7 @@ ssize_t kvnl_write_specification(int fd, struct view spec, kvnl_update_func hash
 
 	ssize_t n = kvnl_write_some(fd, (struct view){ "=", 1 }, hash);
 	if (n < 0) return n;
-	
+
 	return m + n;
 }
 
@@ -184,4 +195,142 @@ ssize_t kvnl_write_ndview(int fd, struct ndview * ndview, char * dtype, size_t i
 cleanup:
 	if (fmt_buf == NULL) buf_free(buf);
 	return r;
+}
+
+kvnl_some kvnl_read_some(int fd, ssize_t size, char * delim, struct buf * buf, kvnl_update_func hash)
+{
+	if (delim == NULL) delim = "";
+
+	if (delim[0] == '\0' && size < 0) {
+		return (kvnl_some){ .error = "either the size or some delimiters must be specified" };
+	}
+
+	size_t initial_size = buf->size;
+
+	if (delim[0] == '\0') {
+		buf_resize(buf, initial_size + size);
+		ssize_t n_read = read(fd, buf->data + buf->size - size, size);
+		if (n_read < 0) {
+			buf_resize(buf, initial_size);
+			return (kvnl_some){ .error = "read() failed, consult errno" };
+		}
+		buf_resize(buf, initial_size + n_read);
+		kvnl_some result = {
+			.view = { buf->data + initial_size, n_read },
+			.error = n_read < size ? "EOF" : NULL
+		};
+		if (hash != NULL && result.error == NULL) hash(result.view);
+		return result;
+	}
+
+	const char * error = NULL;
+	while (size < 0 || buf->size < initial_size + size) {
+		char c;
+		ssize_t n_read = read(fd, &c, 1);
+		if (n_read <= 0) {
+			error = n_read == 0 ? "EOF" : "read() failed, consult errno";
+			break;
+		}
+		buf_append(buf, (struct view){ &c, 1 });
+		if (strchr(delim, c) != NULL) /* a delimiter was found */
+			break;
+	}
+	
+	kvnl_some result = {
+		.view = { buf->data + initial_size, buf->size - initial_size },
+		.error = error
+	};
+	if (hash != NULL && result.error == NULL) hash(result.view);
+
+	return result;
+}
+
+kvnl_specification kvnl_read_specification(int fd, struct buf * buf, kvnl_update_func hash)
+{
+	kvnl_some some = kvnl_read_some(fd, -1, "=\n", buf, hash);
+	if (some.error)
+		return (kvnl_specification){ .key = some.view, .error = some.error };
+
+	/* we got at least 1 byte of data */
+	char * spec = (char *)some.view.data;
+	ssize_t n = some.view.size - 1;
+
+	/* if we terminated due to a new line, we're done, but with an error if there was something else read */
+	if (spec[n] == '\n')
+		return (kvnl_specification){ .key = some.view, .error = n ? "malformed specification" : NULL };
+
+	ssize_t m;
+	for (m = n - 1; spec[m] != ':' && m >= 0; m--);
+
+	/* if there was no size specification, return everything but the trailing = */
+	if (m < 0)
+		return (kvnl_specification){ .key = { spec, n }, .size = -1 };
+
+	char * endptr;
+	ssize_t size = strtol(spec + m + 1, &endptr, 10);
+
+	/* if we something went wrong with the size parsing, return the whole spec with an error */
+	if (*endptr != '=')
+		return (kvnl_specification){ .key = some.view, .error = "malformed size specification" };
+
+	/* return the key name only and the size */
+	return (kvnl_specification){ .key = { spec, m }, .size = size };
+}
+
+kvnl_line kvnl_read_line(int fd, struct buf * buf, kvnl_update_func hash)
+{
+	kvnl_specification spec = kvnl_read_specification(fd, buf, hash);
+	/* forward any errors */
+	if (spec.error)
+		return (kvnl_line){ .key = spec.key, .error = spec.error };
+	/* empty lines are easy */
+	if (spec.key.size == 1 && *(char *)spec.key.data == '\n')
+		return (kvnl_line){ .key = spec.key };
+	
+	/* without a size specification, read until newline */
+	if (spec.size < 0) {
+		kvnl_some some = kvnl_read_some(fd, -1, "\n", buf, hash);
+		struct view value = some.error ? some.view : (struct view){ some.view.data, some.view.size - 1 };
+		return (kvnl_line){
+			.key = spec.key,
+			.size = spec.size,
+			.value = value,
+			.error = some.error
+		};
+	}
+
+	kvnl_some some = kvnl_read_some(fd, spec.size, "", buf, hash);
+	if (some.error)
+		return (kvnl_line){
+			.key = spec.key,
+			.size = spec.size,
+			.value = some.view,
+			.error = some.error
+		};
+
+	kvnl_some trail = kvnl_read_some(fd, -1, "\n", buf, hash);
+
+	/* if we failed to read the trailing newline */
+	if (some.error)
+		return (kvnl_line){
+			.key = spec.key,
+			.size = spec.size,
+			.value = trail.view,
+			.error = some.error
+		};
+	
+	/* if we read something other than the trailing newline */
+	if (trail.view.size != 1)
+		return (kvnl_line){
+			.key = spec.key,
+			.size = spec.size,
+			.value = trail.view,
+			.error = "expected only a trailing newline"
+		};
+
+	return (kvnl_line){
+		.key = spec.key,
+		.size = spec.size,
+		.value = some.view,
+	};
 }
