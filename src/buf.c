@@ -149,7 +149,7 @@ int buf_resize_with(struct buf * buf, size_t size, realloc_func realloc)
 
 	// figure out if we need to reallocate
 	size_t under_capacity = (size_t)(buf->under * buf->capacity);
-	int needs_realloc = buf->capacity < size || size <= under_capacity;
+	int needs_realloc = buf->capacity < size || size < under_capacity;
 	if (!needs_realloc) {
 		buf->size = size;
 		return errno = 0;
