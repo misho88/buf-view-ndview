@@ -34,6 +34,7 @@ struct kvnl_specification kvnl_specification_from_string(char * key, ssize_t siz
 
 ssize_t kvnl_write_some(int fd, struct view view, kvnl_update_func hash)
 {
+	if (view.size == 0) return 0;
 	if (hash != NULL) hash(view);
 	return write(fd, view.data, view.size);
 }
