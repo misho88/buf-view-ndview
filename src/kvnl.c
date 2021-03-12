@@ -198,6 +198,20 @@ cleanup:
 	return r;
 }
 
+
+ssize_t read_into(int fd, struct view view)
+{
+	ssize_t n_read;
+	size_t offset;
+	for (n_read = 0, offset = 0; offset < view.size; offset += n_read) {
+		n_read = read(fd, view.data + offset, view.size - offset);
+		if (n_read < 0) return n_read;
+		if (n_read == 0) break;  /* EOF */
+	}
+	return offset;
+}
+
+
 kvnl_some kvnl_read_some(int fd, ssize_t size, char * delim, struct buf * buf, kvnl_update_func hash)
 {
 	if (delim == NULL) delim = "";
@@ -210,7 +224,8 @@ kvnl_some kvnl_read_some(int fd, ssize_t size, char * delim, struct buf * buf, k
 
 	if (delim[0] == '\0') {
 		buf_resize(buf, initial_size + size);
-		ssize_t n_read = read(fd, buf->data + buf->size - size, size);
+		//ssize_t n_read = read(fd, buf->data + buf->size - size, size);
+		ssize_t n_read = read_into(fd, (struct view){ buf->data + buf->size - size, size });
 		if (n_read < 0) {
 			buf_resize(buf, initial_size);
 			return (kvnl_some){ .error = "read() failed, consult errno" };
