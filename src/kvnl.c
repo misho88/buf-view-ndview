@@ -248,7 +248,7 @@ kvnl_some kvnl_read_some(int fd, ssize_t size, char * delim, struct buf * buf, k
 			break;
 		}
 		buf_append(buf, (struct view){ &c, 1 });
-		if (strchr(delim, c) != NULL) /* a delimiter was found */
+		if (c != '\0' && strchr(delim, c) != NULL) /* a delimiter was found */
 			break;
 	}
 	
