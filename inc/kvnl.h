@@ -44,6 +44,47 @@ typedef struct kvnl_block {
 	kvnl_line * lines;
 } kvnl_block;
 
+#define kvnl_some_fprint(some_expr, fmt, type, stream) do { \
+	kvnl_some __some = (some_expr); \
+	fputs("kvnl_some { .view = ", stream); \
+	view_fprint(__some.view, fmt, type, stream); \
+	if (__some.error != NULL) fprintf(stream, ", .error = %s }", __some.error); \
+	else                      fputs(" }", stream); \
+} while (0)
+#define kvnl_some_print(some_expr, fmt, type) do { \
+	kvnl_some_fprint(some_expr, fmt, type, stdout); \
+} while (0)
+
+
+#define kvnl_specification_fprint(specification_expr, stream) do { \
+	kvnl_specification __specification = (specification_expr); \
+	fputs("kvnl_specification { .key = ", stream); \
+	view_fprint(__specification.key, "%c", char, stream); \
+	if (__specification.size >= 0)     fprintf(stream, ", .size = %ld", __specification.size); \
+	if (__specification.error != NULL) fprintf(stream, ", .error = %s }", __specification.error); \
+	else                               fputs(" }", stream); \
+} while (0)
+#define kvnl_specification_print(specification_expr) do { \
+	kvnl_specification_fprint(specification_expr, stdout); \
+} while (0)
+
+
+#define kvnl_line_fprint(line_expr, fmt, type, stream) do { \
+	kvnl_line __line = (line_expr); \
+	fputs("kvnl_line { .key = ", stream); \
+	view_fprint(__line.key, "%c", char, stream); \
+	if (__line.size >= 0)     fprintf(stream, ", .size = %ld", __line.size); \
+	fputs(", .value = ", stream); \
+	view_fprint(__line.value, fmt, type, stream); \
+	if (__line.error != NULL) fprintf(stream, ", .error = %s }", __line.error); \
+	else                      fputs(" }", stream); \
+} while (0)
+#define kvnl_line_print(specification_expr, fmt, type) do { \
+	kvnl_line_fprint(specification_expr, fmt, type, stdout); \
+} while (0)
+
+
+
 struct kvnl_specification kvnl_decode_specification(struct view spec);
 
 typedef int (*kvnl_update_func)(struct view);
