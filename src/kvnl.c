@@ -303,50 +303,53 @@ kvnl_line kvnl_read_line(int fd, struct buf * buf, kvnl_update_func hash)
 	if (spec.key.size == 1 && *(char *)spec.key.data == '\n')
 		return (kvnl_line){ .key = spec.key };
 	
+	void * const pre_value_data = buf->data; // realloc may move buffer, invalidating spec.key.data
+
 	/* without a size specification, read until newline */
 	if (spec.size < 0) {
-		kvnl_some some = kvnl_read_some(fd, -1, "\n", buf, hash);
-		struct view value = some.error ? some.view : (struct view){ some.view.data, some.view.size - 1 };
+		kvnl_some value = kvnl_read_some(fd, -1, "\n", buf, hash);
 		return (kvnl_line){
-			.key = spec.key,
+			.key = { spec.key.data + (buf->data - pre_value_data), spec.key.size },
 			.size = spec.size,
-			.value = value,
-			.error = some.error
+			.value = value.error ? value.view : (struct view){ value.view.data, value.view.size - 1 },
+			.error = value.error
 		};
 	}
 
-	kvnl_some some = kvnl_read_some(fd, spec.size, "", buf, hash);
-	if (some.error)
+	/* read an exact size */
+	kvnl_some value = kvnl_read_some(fd, spec.size, "", buf, hash);
+	if (value.error)
 		return (kvnl_line){
-			.key = spec.key,
+			.key = { spec.key.data + (buf->data - pre_value_data), spec.key.size },
 			.size = spec.size,
-			.value = some.view,
-			.error = some.error
+			.value = value.view,
+			.error = value.error
 		};
 
+	void * const pre_newline_data = buf->data; // realloc may move buffer, invalidating value.data
 	kvnl_some trail = kvnl_read_some(fd, -1, "\n", buf, hash);
 
 	/* if we failed to read the trailing newline */
-	if (some.error)
+	if (trail.error)
 		return (kvnl_line){
-			.key = spec.key,
+			.key = { spec.key.data + (buf->data - pre_value_data), spec.key.size },
 			.size = spec.size,
 			.value = trail.view,
-			.error = some.error
+			.error = trail.error
 		};
 	
 	/* if we read something other than the trailing newline */
 	if (trail.view.size != 1)
 		return (kvnl_line){
-			.key = spec.key,
+			.key = { spec.key.data + (buf->data - pre_value_data), spec.key.size },
 			.size = spec.size,
 			.value = trail.view,
 			.error = "expected only a trailing newline"
 		};
 
 	return (kvnl_line){
-		.key = spec.key,
+		.key = { spec.key.data + (buf->data - pre_value_data), spec.key.size },
 		.size = spec.size,
-		.value = some.view,
+		.value = { value.view.data + (buf->data - pre_newline_data), value.view.size },
 	};
 }
